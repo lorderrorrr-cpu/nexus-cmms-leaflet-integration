@@ -1,14 +1,16 @@
 flowchart TD
-  Start[Landing Page]
-  SignUpPage[Sign Up Page]
-  SignInPage[Sign In Page]
-  AuthAPI[Authentication API Endpoint]
-  DashboardPage[Dashboard Page]
-  Start -->|Select Sign Up| SignUpPage
-  Start -->|Select Sign In| SignInPage
-  SignUpPage -->|Submit Credentials| AuthAPI
-  SignInPage -->|Submit Credentials| AuthAPI
-  AuthAPI -->|Success| DashboardPage
-  AuthAPI -->|Error| SignUpPage
-  AuthAPI -->|Error| SignInPage
-  DashboardPage -->|Click Logout| Start
+    A[Sign In] --> B[Dashboard]
+    B --> C[Master Data Management]
+    B --> D[Ticketing Module]
+    D --> E[Create Ticket]
+    D --> F[View Tickets]
+    F --> G[Ticket Details]
+    B --> H[Live Ticket Map]
+    C --> I[Location Map]
+    E --> J[GPS Verification Map]
+    G --> K[PDF Jobcard Generation]
+    E --> D1{Online or Offline}
+    D1 -->|Online| F
+    D1 -->|Offline| L[Offline Sync]
+    L --> F
+    B --> M[Sign Out]

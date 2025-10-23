@@ -1,179 +1,227 @@
-# Backend Structure Document
+# Backend Structure Document for Nexus CMMS
 
-This document outlines the backend architecture, hosting, and infrastructure for the **codeguide-starter** project. It uses plain language so anyone can understand how the backend is set up and how it supports the application.
+This document outlines the backend architecture, database management, schema design, API endpoints, hosting, infrastructure, security, and maintenance strategies used in the `nexus-cmms-leaflet-integration` project. It is written in everyday language to ensure clarity for both technical and non-technical readers.
 
 ## 1. Backend Architecture
 
-- **Framework and Design Pattern**
-  - We use **Next.js API Routes** to handle all server-side logic. These routes live alongside the frontend code in the same repository, making development and deployment simpler.
-  - The backend follows a **layered pattern**:
-    1. **API Layer**: Receives requests (login, registration, data fetch).  
-    2. **Service Layer**: Contains the core business logic (user validation, password hashing).  
-    3. **Data Access Layer**: Talks to the database via a simple ORM (e.g., Prisma or TypeORM).
+**Overall Design**  
+- The backend is built into Next.js using its API Routes. This means that all server logic lives alongside the frontend code in a single monorepo, but runs separately on the server.  
+- We use TypeScript throughout for clear contracts, fewer bugs, and easier refactoring.  
+- Drizzle ORM sits between our code and PostgreSQL to provide type-safe database interactions.
 
-- **Scalability**
-  - Stateless API routes can scale horizontally—new instances can spin up on demand.  
-  - We can add caching or a message queue (e.g., Redis or RabbitMQ) without changing the core code.
+**Key Patterns and Frameworks**  
+- Next.js API Routes: Handles HTTP requests (GET, POST, PUT, DELETE) under `/app/api`.  
+- Better Auth: Manages user sessions, password hashing, and token strategies for Role-Based Access Control (RBAC).  
+- Docker: Encapsulates the backend in containers for consistent environments from development through production.
 
-- **Maintainability**
-  - Code for each feature is grouped by route (authentication, dashboard).  
-  - A service layer separates complex logic from request handling.
-
-- **Performance**
-  - Lightweight Node.js handlers keep response times low.  
-  - Future use of database connection pooling and Redis for caching repeated queries.
+**Scalability, Maintainability, Performance**  
+- Stateless API design: Each request is independent, so we can add more containers (horizontal scaling) behind a load balancer.  
+- Modular code structure: Authentication, ticketing, assets, and reporting each live in their own folders. This makes it simple to onboard new developers or extend features.  
+- Type safety (TypeScript + Drizzle): Catch errors at compile time, leading to fewer runtime surprises and faster development cycles.
 
 ## 2. Database Management
 
-- **Database Choice**
-  - We recommend **PostgreSQL** for structured data and reliable transactions.  
-  - In-memory caching can be added later with **Redis** for session tokens or frequently read data.
+**Technologies Used**  
+- Relational Database: PostgreSQL  
+- ORM: Drizzle ORM (type-safe, code-first migrations)  
+- Connection Pooling: Managed via the Postgres driver built into Next.js, with environment-based pool size settings.
 
-- **Data Storage and Access**
-  - Use an ORM like **Prisma** or **TypeORM** to map JavaScript/TypeScript objects to database tables.
-  - Connection pooling ensures efficient use of database connections under load.
-  - Migrations track schema changes over time, keeping development, staging, and production in sync.
+**Data Structure & Access**  
+- Normalized tables store users, roles, locations, assets, tickets, SLA rules, approvals, and audit logs.  
+- Drizzle’s migrations keep the schema in sync with the code, and versioned migration files allow safe upgrades.  
+- Indexes on key columns (e.g., ticket status, asset ID) speed up queries in the dashboards.
 
-- **Data Practices**
-  - Passwords are never stored in plain text—they are salted and hashed with **bcrypt** before saving.
-  - All outgoing data is typed and validated to prevent malformed records.
+**Data Practices**  
+- Regular automated backups (nightly snapshots) of the production database.  
+- Read-replica for reporting queries, keeping the primary database fast for transactional workloads.
 
 ## 3. Database Schema
 
-### Human-Readable Format
+Below is a human-friendly overview, followed by the actual SQL definitions.
 
-- **Users**
-  - **id**: Unique identifier  
-  - **email**: User’s email address (unique)  
-  - **password_hash**: Securely hashed password  
-  - **created_at**: Account creation timestamp
+**Human-Readable Overview**  
+- **Users & Roles**: Users sign in, and each user has one or more roles (Admin, Supervisor, Technician, Viewer).  
+- **Locations**: Known as TIDs (Tenant Installation Device), with address and GPS coordinates.  
+- **Assets**: Equipment or devices located at a TID.  
+- **Tickets**: Work orders of types PM (Preventive Maintenance) or CM (Corrective Maintenance) linked to an asset and a technician.  
+- **SLA Matrices**: Rules defining target response and fix times by ticket type and priority.  
+- **Approvals & Audit Logs**: Tracks when a supervisor or manager approves ticket closure and logs every change.
 
-- **Sessions**
-  - **id**: Unique session record  
-  - **user_id**: Links to a user  
-  - **token**: Random string for authentication  
-  - **expires_at**: When the token stops working  
-  - **created_at**: When the session was created
+**SQL Schema (PostgreSQL)**  ```sql
+-- Users and Roles
+CREATE TABLE roles (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(50) UNIQUE NOT NULL  -- e.g. Admin, Technician
+);
 
-- **DashboardItems** *(optional for dynamic data)*
-  - **id**: Unique record  
-  - **title**: Item title  
-  - **content**: Item details  
-  - **created_at**: When the item was added
-
-### SQL Schema (PostgreSQL)
-```sql
--- Users table
 CREATE TABLE users (
   id SERIAL PRIMARY KEY,
   email VARCHAR(255) UNIQUE NOT NULL,
   password_hash VARCHAR(255) NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Sessions table
-CREATE TABLE sessions (
-  id SERIAL PRIMARY KEY,
-  user_id INT REFERENCES users(id) ON DELETE CASCADE,
-  token VARCHAR(255) UNIQUE NOT NULL,
-  expires_at TIMESTAMPTZ NOT NULL,
-  created_at TIMESTAMPTZ DEFAULT now()
+CREATE TABLE user_roles (
+  user_id INT REFERENCES users(id),
+  role_id INT REFERENCES roles(id),
+  PRIMARY KEY (user_id, role_id)
 );
 
--- Dashboard items table
-CREATE TABLE dashboard_items (
+-- Locations (Master Lokasi/TID)
+CREATE TABLE locations (
   id SERIAL PRIMARY KEY,
-  title TEXT NOT NULL,
-  content TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+  code VARCHAR(100) UNIQUE NOT NULL,  -- TID code
+  name VARCHAR(255) NOT NULL,
+  address TEXT,
+  latitude DOUBLE PRECISION,
+  longitude DOUBLE PRECISION,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Assets (Master Asset)
+CREATE TABLE assets (
+  id SERIAL PRIMARY KEY,
+  location_id INT REFERENCES locations(id) ON DELETE CASCADE,
+  tag VARCHAR(100) UNIQUE NOT NULL,
+  name VARCHAR(255) NOT NULL,
+  category VARCHAR(100),
+  purchase_date DATE,
+  status VARCHAR(50) DEFAULT 'active',
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- SLA Matrices
+CREATE TABLE sla_matrices (
+  id SERIAL PRIMARY KEY,
+  ticket_type VARCHAR(50) NOT NULL,    -- PM or CM
+  priority VARCHAR(50) NOT NULL,       -- e.g. High, Medium, Low
+  response_target INTERVAL NOT NULL,    -- e.g. '2 hours'
+  resolution_target INTERVAL NOT NULL,  -- e.g. '24 hours'
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Tickets
+CREATE TABLE tickets (
+  id SERIAL PRIMARY KEY,
+  asset_id INT REFERENCES assets(id) ON DELETE SET NULL,
+  created_by INT REFERENCES users(id),
+  assigned_to INT REFERENCES users(id),
+  ticket_type VARCHAR(50) NOT NULL,
+  priority VARCHAR(50) NOT NULL,
+  status VARCHAR(50) DEFAULT 'open',
+  description TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Approvals
+CREATE TABLE approvals (
+  id SERIAL PRIMARY KEY,
+  ticket_id INT REFERENCES tickets(id) ON DELETE CASCADE,
+  approved_by INT REFERENCES users(id),
+  approved_at TIMESTAMPTZ DEFAULT NOW(),
+  comments TEXT
+);
+
+-- Audit Logs
+CREATE TABLE audit_logs (
+  id SERIAL PRIMARY KEY,
+  entity_type VARCHAR(50) NOT NULL,  -- e.g. 'ticket', 'asset'
+  entity_id INT NOT NULL,
+  action VARCHAR(50) NOT NULL,       -- e.g. 'create', 'update'
+  performed_by INT REFERENCES users(id),
+  performed_at TIMESTAMPTZ DEFAULT NOW(),
+  change_summary JSONB
 );
 ```  
 
 ## 4. API Design and Endpoints
 
-- **Approach**: We follow a **RESTful** style, grouping related endpoints under `/api` directories.
+We follow RESTful conventions, grouping endpoints under `/api/{resource}`. All responses use JSON.
 
-- **Key Endpoints**
-  - `POST /api/auth/register`  
-    • Accepts `{ email, password }`  
-    • Creates a new user and issues a session token  
-  - `POST /api/auth/login`  
-    • Accepts `{ email, password }`  
-    • Verifies credentials and returns a session token  
-  - `POST /api/auth/logout`  
-    • Invalidates the session token on the server  
-  - `GET /api/dashboard/data`  
-    • Requires a valid session  
-    • Returns user-specific data or dashboard items  
+**Authentication**  
+- **POST /api/auth/signup**: Register a new user (email, password).  
+- **POST /api/auth/login**: Sign in and start a session.  
+- **POST /api/auth/logout**: End session.
 
-- **Communication**
-  - Frontend sends JSON requests; backend replies with JSON and appropriate HTTP status codes.  
-  - Protected routes check for a valid session token (in cookies or Authorization header).
+**Users & Roles**  
+- **GET /api/users**: List all users (Admin only).  
+- **PUT /api/users/:id**: Update user info or roles.  
+- **DELETE /api/users/:id**: Remove a user.
+
+**Locations**  
+- **GET /api/locations**: List all locations/TIDs.  
+- **POST /api/locations**: Add a new location.  
+- **PUT /api/locations/:id**: Update location details.  
+- **DELETE /api/locations/:id**: Remove a location.
+
+**Assets**  
+- **GET /api/assets**: List or filter assets.  
+- **POST /api/assets**: Register a new asset.  
+- **PUT /api/assets/:id**: Update asset data.  
+- **DELETE /api/assets/:id**: Decommission an asset.
+
+**Tickets**  
+- **GET /api/tickets**: List tickets with filters (status, priority).  
+- **POST /api/tickets**: Create a new PM or CM ticket.  
+- **PUT /api/tickets/:id**: Update status, assign technician.  
+- **DELETE /api/tickets/:id**: Cancel ticket.
+
+**SLA Matrices**  
+- **GET /api/sla**: List SLA rules.  
+- **POST /api/sla**: Create or update SLA targets.
+
+**Approvals**  
+- **POST /api/approvals**: Supervisor approves ticket closure.  
+- **GET /api/approvals/:ticketId**: View approval history.
+
+**Maps & Spatial Data**  
+- **GET /api/maps/live-tickets**: Returns geo-coordinates and status of active tickets for the dashboard.  
+- **GET /api/maps/locations**: Returns all TID locations for the location map.
+
+**PDF Generation**  
+- **POST /api/pdf/jobcard**: Generates and returns a PDF jobcard for a closed ticket.
 
 ## 5. Hosting Solutions
 
-- **Cloud Provider**:  
-  - **Vercel** (recommended) offers seamless Next.js deployments, auto-scaling, and built-in CDN.  
-  - Alternatively, **Netlify** or any Node.js-capable host will work.
+**Primary Hosting**  
+- We deploy Dockerized containers to AWS Elastic Container Service (ECS) on Fargate for easy scaling and zero server maintenance.  
+- PostgreSQL runs on Amazon RDS with Multi-AZ for failover and automated backups.
 
-- **Benefits**
-  - **Reliability**: Global servers and failover across regions.  
-  - **Scalability**: Auto-scale serverless functions based on traffic.  
-  - **Cost-Effectiveness**: Pay-per-use model means low cost for small projects.
+**Benefits**  
+- **Reliability**: Managed services reduce downtime.  
+- **Scalability**: Fargate auto-scales containers based on CPU/memory.  
+- **Cost-Effectiveness**: Pay for what you use; no idle servers.
 
 ## 6. Infrastructure Components
 
-- **Load Balancer**
-  - Provided by the hosting platform—distributes API requests across function instances.
-
-- **CDN (Content Delivery Network)**
-  - Vercel’s global edge network caches static assets (CSS, JS, images) for faster page loads.
-
-- **Caching**
-  - **Redis** (optional) for session storage or caching dashboard queries to reduce database load.
-
-- **Object Storage**
-  - For file uploads or backups, integrate with AWS S3 or similar services.
-
-- **Message Queue**
-  - In future, use **RabbitMQ** or **Kafka** for background tasks (e.g., email notifications).
+- **Load Balancer**: AWS Application Load Balancer (ALB) distributes traffic across containers.  
+- **Caching**: Redis via Amazon ElastiCache for session data caching and frequently read ticket or SLA data.  
+- **CDN**: Amazon CloudFront caches static assets (PDF templates, map tiles) for faster load times worldwide.  
+- **Networking**: All services run in a VPC with public/private subnets and strict security group rules.  
+- **Container Registry**: AWS ECR stores Docker images with version tagging.
 
 ## 7. Security Measures
 
-- **Authentication & Authorization**
-  - Passwords hashed with **bcrypt** and salted.  
-  - Session tokens stored in secure, HttpOnly cookies or Authorization headers.  
-  - Protected endpoints verify tokens before proceeding.
-
-- **Data Encryption**
-  - **HTTPS/TLS** encrypts data in transit.  
-  - Database connections use SSL to encrypt data between the app and the database.
-
-- **Input Validation**
-  - Every incoming request is validated (e.g., valid email format, password length) to prevent SQL injection or other attacks.
-
-- **Web Security Best Practices**
-  - Enable **CORS** policies to limit allowed origins.  
-  - Use **CSRF tokens** or same-site cookies to prevent cross-site requests.  
-  - Set secure headers with **Helmet** or a similar middleware.
+- **Authentication & Authorization**: Better Auth handles secure password storage (bcrypt), session cookies, and JWTs. RBAC enforces who can access which endpoints.  
+- **Encryption**: TLS everywhere in transit, Amazon RDS encryption at rest, and encrypted S3 buckets for PDF storage.  
+- **Secrets Management**: AWS Secrets Manager or environment variables stored securely in ECS Task Definitions.  
+- **OWASP Best Practices**: Input validation, rate limiting on login, and regular dependency audits.
 
 ## 8. Monitoring and Maintenance
 
-- **Performance Monitoring**
-  - Integrate **Sentry** or **LogRocket** for real-time crash reporting and performance tracing.  
-  - Use Vercel’s built-in analytics to track request latencies and error rates.
-
-- **Logging**
-  - Structured logs (JSON) for all API requests and errors, shipped to a log management service like **Datadog** or **Logflare**.
-
-- **Health Checks**
-  - Define a `/health` endpoint that returns a 200 status if the service is up and the database is reachable.
-
-- **Maintenance Strategies**
-  - Automated migrations run on deploy to keep the database schema up to date.  
-  - Scheduled dependency audits and security scans (e.g., `npm audit`).
-  - Regular backups of the database (daily or weekly depending on usage).
+- **Logging**: Application logs shipped to Amazon CloudWatch Logs. Error tracking via Sentry.  
+- **Metrics**: Container and database metrics in CloudWatch; custom business KPIs pushed via Prometheus/Grafana.  
+- **Health Checks**: ALB health checks on `/api/health`. Automatic restarts on failures.  
+- **Backups & Migrations**: Nightly RDS snapshots; Drizzle ORM migrations run in CI/CD pipeline.  
+- **CI/CD**: GitHub Actions build Docker images, run tests (Jest, Playwright), and deploy to ECS on merge to main.
 
 ## 9. Conclusion and Overall Backend Summary
 
-The backend for **codeguide-starter** is built on Next.js API Routes and Node.js, paired with PostgreSQL for data and optional Redis for caching. It follows a clear layered architecture that keeps code easy to maintain and extend. With RESTful endpoints for authentication and data, secure practices like password hashing and HTTPS, and hosting on Vercel for scalability and global performance, this setup meets the project’s goals for a fast, secure, and developer-friendly foundation. Future enhancements—such as background job queues, advanced monitoring, or richer data models—can be added without disrupting the core structure.
+This backend is a modern, containerized, API-driven system designed to power the Nexus CMMS with high reliability, strong data integrity, and clear scalability paths.  
+- **Type-Safe Data Layer** (Drizzle + PostgreSQL) ensures every database transaction matches the code’s expectations.  
+- **Internal-First API** (Next.js Routes) centralizes business logic and simplifies development and testing.  
+- **Future-Ready**: Infrastructure and patterns are in place to add real-time spatial intelligence (Leaflet maps), automated PM scheduling, dynamic forms, and robust PDF generation without major rewrites.  
+
+Overall, this backend structure aligns tightly with Nexus’s goals for secure, real-time operations, and provides a rock-solid foundation for the full CMMS feature set.

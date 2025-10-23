@@ -1,117 +1,84 @@
-# Project Requirements Document: codeguide-starter
-
----
+# Project Requirements Document (PRD)
 
 ## 1. Project Overview
 
-The **codeguide-starter** project is a boilerplate web application that provides a ready-made foundation for any web project requiring secure user authentication and a post-login dashboard. It sets up the common building blocks—sign-up and sign-in pages, API routes to handle registration and login, and a simple dashboard interface driven by static data. By delivering this skeleton, it accelerates development time and ensures best practices are in place from day one.
+Nexus CMMS Leaflet Integration is the next step in building the Nexus Computerized Maintenance Management System (CMMS), a standalone platform for managing IT device–related services. Its core purpose is to provide an integrated dashboard that combines ticketing, asset management, and real-time spatial intelligence. Developers will build upon the existing Next.js scaffold—complete with authentication, UI components, and a type-safe database—to add interactive maps via Leaflet and React-Leaflet. This will empower operations teams with live location tracking of service tickets and assets.
 
-This starter kit is being built to solve the friction developers face when setting up repeated common tasks: credential handling, session management, page routing, and theming. Key objectives include: 1) delivering a fully working authentication flow (registration & login), 2) providing a gated dashboard area upon successful login, 3) establishing a clear, maintainable project structure using Next.js and TypeScript, and 4) demonstrating a clean theming approach with global and section-specific CSS. Success is measured by having an end-to-end login journey in under 200 lines of code and zero runtime type errors.
-
----
+We’re building this feature to solve the problem of limited situational awareness in traditional CMMS platforms. By visualizing active tickets and asset locations on a map, supervisors and technicians can respond faster, optimize dispatch routes, and validate field data. Success criteria include: a working login and RBAC system; a dashboard page displaying a clustered, real-time ticket map; a location management view that plots all facility points; and GPS verification embedded in ticket forms.
 
 ## 2. In-Scope vs. Out-of-Scope
 
-### In-Scope (Version 1)
-- User registration (sign-up) form with validation
-- User login (sign-in) form with validation
-- Next.js API routes under `/api/auth/route.ts` handling:
-  - Credential validation
-  - Password hashing (e.g., bcrypt)
-  - Session creation or JWT issuance
-- Protected dashboard pages under `/dashboard`:
-  - `layout.tsx` wrapping dashboard content
-  - `page.tsx` rendering static data from `data.json`
-- Global application layout in `/app/layout.tsx`
-- Basic styling via `globals.css` and `dashboard/theme.css`
-- TypeScript strict mode enabled
+**In-Scope (Version 1):**
+- Secure user authentication and role-based access control (Admin, Supervisor, Technician, Viewer).
+- Protected dashboard layout with sidebar navigation.
+- Leaflet map integration (using react-leaflet) with:
+  - Live Ticket Map: clustered markers showing open tickets.
+  - Location Map View: plotting Master Lokasi (TID) points under “Master Data.”
+  - GPS Verification Map: small map widget in ticket creation forms comparing technician’s GPS vs. site coordinates.
+- Core modules: Master Data Management (locations & assets), Ticketing CRUD, and basic Reporting & Analytics placeholder.
+- Backend API routes for tickets, assets, locations, and user roles (Next.js API Routes + Drizzle ORM).
+- Database schema definitions (Drizzle + PostgreSQL) for locations, assets, tickets, users, roles.
 
-### Out-of-Scope (Later Phases)
-- Integration with a real database (PostgreSQL, MongoDB, etc.)
-- Advanced authentication flows (password reset, email verification, MFA)
-- Role-based access control (RBAC)
-- Multi-tenant or white-label theming
-- Unit, integration, or end-to-end testing suites
-- CI/CD pipeline and production deployment scripts
-
----
+**Out-of-Scope (Planned for Phase 2+):**
+- Smart Dispatch Map (real-time technician assignment optimization).
+- Dynamic Form Builder with JSON-driven forms.
+- Preventive Maintenance Scheduling engine (cron jobs).
+- PDF Jobcard Generation Engine.
+- Full PWA/offline support with service workers.
+- End-to-end automated testing and CI/CD pipeline.
 
 ## 3. User Flow
 
-A new visitor lands on the root URL and sees a welcome page with options to **Sign Up** or **Sign In**. If they choose Sign Up, they fill in their email, password, and hit “Create Account.” The form submits to `/api/auth/route.ts`, which hashes the password, creates a new user session or token, and redirects them to the dashboard. If any input is invalid, an inline error message explains the issue (e.g., “Password too short”).
+A technician or manager visits the CMMS URL and lands on the sign-in page. They enter credentials, which are verified through the Better Auth service. Upon successful login, the user is routed to the main dashboard. The left sidebar displays navigation links—Dashboard, Master Data, Tickets, Reports, and Profile—tailored to their role.
 
-Once authenticated, the user is taken to the `/dashboard` route. Here they see a sidebar or header defined by `dashboard/layout.tsx`, and the main panel pulls in static data from `data.json`. They can log out (if that control is present), but otherwise their entire session is managed by server-side cookies or tokens. Returning users go directly to Sign In, submit credentials, and upon success they land back on `/dashboard`. Any unauthorized access to `/dashboard` redirects back to Sign In.
-
----
+On the Dashboard screen, the user sees a Leaflet map with clustered ticket markers. Clicking a cluster zooms in to reveal individual tickets; clicking a marker opens a side panel with ticket details. From the sidebar, they can go to Master Data → Location Map to view all facility points on a full-screen map. To create or edit a ticket, they navigate to Tickets → New Ticket form, which includes a GPS Verification map showing current GPS vs. stored site coordinates. After submission, the ticket appears on the live map in near real time.
 
 ## 4. Core Features
 
-- **Sign-Up Page (`/app/sign-up/page.tsx`)**: Form fields for email & password, client-side validation, POST to `/api/auth`.
-- **Sign-In Page (`/app/sign-in/page.tsx`)**: Form fields for email & password, client-side validation, POST to `/api/auth`.
-- **Authentication API (`/app/api/auth/route.ts`)**: Handles both registration and login based on HTTP method, integrates password hashing (bcrypt) and session or JWT logic.
-- **Global Layout (`/app/layout.tsx` + `globals.css`)**: Shared header, footer, and CSS resets across all pages.
-- **Dashboard Layout (`/app/dashboard/layout.tsx` + `dashboard/theme.css`)**: Sidebar or top nav for authenticated flows, section-specific styling.
-- **Dashboard Page (`/app/dashboard/page.tsx`)**: Reads `data.json`, renders it as cards or tables.
-- **Static Data Source (`/app/dashboard/data.json`)**: Example dataset to demo dynamic rendering.
-- **TypeScript Configuration**: `tsconfig.json` with strict mode and path aliases (if any).
-
----
+- **Authentication & RBAC:** Secure sign-in, session management, and four user roles.
+- **Dashboard Module:** Protected route with sidebar and server-rendered layout.
+- **Leaflet Map Integration:** React-Leaflet components for live ticket map, location view, and GPS verification.
+- **Master Data CRUD:** Create, read, update, delete for Locations (TID) and Assets.
+- **Ticketing Engine:** Ticket creation, listing, detail view, and status updates.
+- **API Layer:** Next.js API Routes for all CRUD operations, powered by Drizzle ORM.
+- **Database Layer:** PostgreSQL schemas for users, roles, locations, assets, tickets.
+- **UI Component Library:** shadcn/ui + Tailwind CSS for tables, inputs, dropdowns, charts.
 
 ## 5. Tech Stack & Tools
 
-- **Framework**: Next.js (App Router) for file-based routing, SSR/SSG, and API routes.
-- **Language**: TypeScript for type safety.
-- **UI Library**: React 18 for component-based UI.
-- **Styling**: Plain CSS via `globals.css` (global reset) and `theme.css` (sectional styling). Can easily migrate to CSS Modules or Tailwind in the future.
-- **Backend**: Node.js runtime provided by Next.js API routes.
-- **Password Hashing**: bcrypt (npm package).
-- **Session/JWT**: NextAuth.js or custom JWT logic (to be decided in implementation).
-- **IDE & Dev Tools**: VS Code with ESLint, Prettier extensions. Optionally, Cursor.ai for AI-assisted coding.
-
----
+- **Frontend:** Next.js (App Router), React, TypeScript, Tailwind CSS, shadcn/ui
+- **Mapping:** Leaflet, React-Leaflet
+- **Authentication:** Better Auth library
+- **Backend:** Next.js API Routes, TypeScript
+- **Database:** PostgreSQL, Drizzle ORM
+- **Containerization:** Docker
+- **Testing (future):** Jest for unit, Playwright/Cypress for E2E
+- **Deployment (future):** GitHub Actions for CI/CD
 
 ## 6. Non-Functional Requirements
 
-- **Performance**: Initial page load under 200 ms on a standard broadband connection. API responses under 300 ms.
-- **Security**:
-  - HTTPS only in production.
-  - Proper CORS, CSRF protection for API routes.
-  - Secure password storage (bcrypt with salt).
-  - No credentials or secrets checked into version control.
-- **Scalability**: Structure must support adding database integration, caching layers, and advanced auth flows without rewiring core app.
-- **Usability**: Forms should give real-time feedback on invalid input. Layout must be responsive (mobile > 320 px).
-- **Maintainability**: Code must adhere to TypeScript strict mode. Linting & formatting enforced by ESLint/Prettier.
-
----
+- **Performance:** API response time <200ms; initial dashboard load <2s; map tile load <1s.
+- **Security:** Encrypted HTTPS all endpoints; role-based access enforced in API and UI; environment variables for secrets.
+- **Scalability:** Marker clustering for maps; type-safe ORM to prevent schema drift.
+- **Usability:** Responsive design for desktop and tablet; accessible components (WCAG AA).
+- **Reliability:** 99.9% uptime; automated backups of PostgreSQL database.
 
 ## 7. Constraints & Assumptions
 
-- **No Database**: Dashboard uses only `data.json`; real database integration is deferred.
-- **Node Version**: Requires Node.js >= 14.
-- **Next.js Version**: Built on Next.js 13+ App Router.
-- **Authentication**: Assumes availability of bcrypt or NextAuth.js at implementation time.
-- **Hosting**: Targets serverless or Node.js-capable hosting (e.g., Vercel, Netlify).
-- **Browser Support**: Modern evergreen browsers; no IE11 support required.
-
----
+- The PostgreSQL server is reachable at the provided network address.
+- Leaflet and React-Leaflet can be dynamically imported to avoid SSR issues in Next.js.
+- Better Auth sessions will handle JWT tokens and auto-refresh.
+- No external mapping APIs (e.g., Mapbox) will be used—only open-source Leaflet tiles.
+- The environment supports Docker and TypeScript.
 
 ## 8. Known Issues & Potential Pitfalls
 
-- **Static Data Limitation**: `data.json` is only for demo. A real API or database will be needed to avoid stale data.
-  *Mitigation*: Define a clear interface for data fetching so swapping to a live endpoint is trivial.
-
-- **Global CSS Conflicts**: Using global styles can lead to unintended overrides.
-  *Mitigation*: Plan to migrate to CSS Modules or utility-first CSS in Phase 2.
-
-- **API Route Ambiguity**: Single `/api/auth/route.ts` handling both sign-up and sign-in could get complex.
-  *Mitigation*: Clearly branch on HTTP method (`POST /register` vs. `POST /login`) or split into separate files.
-
-- **Lack of Testing**: No test suite means regressions can slip in.
-  *Mitigation*: Build a minimal Jest + React Testing Library setup in an early iteration.
-
-- **Error Handling Gaps**: Client and server must handle edge cases (network failures, malformed input).
-  *Mitigation*: Define a standard error response schema and show user-friendly messages.
+- **SSR & Leaflet:** Leaflet relies on `window`. Mitigation: dynamically import map components with `next/dynamic` and disable SSR.
+- **Marker Performance:** Too many markers can slow the client. Mitigation: use clustering and viewport-based loading.
+- **API Rate Limits:** Internal API calls must be throttled if volume spikes. Mitigation: simple in-memory rate limiting or caching layer.
+- **Schema Migration Drift:** Changing Drizzle schema without migrations can cause mismatches. Mitigation: establish a migration workflow (e.g., Drizzle migrations).
+- **GPS Accuracy:** Device GPS may report low accuracy. Mitigation: show accuracy radius on GPS Verification map and warn users.
 
 ---
 
-This PRD should serve as the single source of truth for the AI model or any developer generating the next set of technical documents: Tech Stack Doc, Frontend Guidelines, Backend Structure, App Flow, File Structure, and IDE Rules. It contains all functional and non-functional requirements with no ambiguity, enabling seamless downstream development.
+This PRD provides a clear, unambiguous blueprint for building the Leaflet integration into the Nexus CMMS scaffold. All details are defined so that subsequent technical documents can be drafted without further clarification.
